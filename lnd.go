@@ -443,6 +443,90 @@ func (lnd *Lnd) estimateRoutingFee(destination string, amount_msat uint64) (uint
 	return estimate.RoutingFeeMsat, estimate.TimeLockDelay, nil
 }
 
+func (lnd *Lnd) IdentityPubkey() (string, error) {
+	req, err := http.NewRequest(
+		"GET",
+		lnd.Host.JoinPath("v1/getinfo").String(),
+		nil,
+	)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Add("Grpc-Metadata-macaroon", lnd.Macaroon)
+
+	resp, err := lnd.Client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("v1/getinfo: %s", string(body))
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	r := struct {
+		IdentityPubkey string `json:"identity_pubkey"`
+	}{}
+	err = dec.Decode(&r)
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	if r.IdentityPubkey == "" {
+		return "", errors.New("v1/getinfo: empty identity_pubkey")
+	}
+	return r.IdentityPubkey, nil
+}
+
+func (lnd *Lnd) SignMessage(msg []byte) (string, error) {
+	params, err := json.Marshal(struct {
+		Msg []byte `json:"msg"`
+	}{
+		Msg: msg,
+	})
+	if err != nil {
+		return "", err
+	}
+	buf := bytes.NewBuffer(params)
+	req, err := http.NewRequest(
+		"POST",
+		lnd.Host.JoinPath("v1/signmessage").String(),
+		buf,
+	)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Add("Grpc-Metadata-macaroon", lnd.Macaroon)
+	resp, err := lnd.Client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("v1/signmessage: %s", string(body))
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	r := struct {
+		Signature string `json:"signature"`
+	}{}
+	err = dec.Decode(&r)
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	if r.Signature == "" {
+		return "", errors.New("v1/signmessage: empty signature")
+	}
+	return r.Signature, nil
+}
+
 func (lnd *Lnd) getBlockHeight() (uint64, error) {
 	req, err := http.NewRequest(
 		"GET",

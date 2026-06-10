@@ -23,6 +23,20 @@ type LN interface {
 	EstimateRoutingFee(DecodedInvoice, uint64) (min_fee_msat uint64, min_cltv_delta uint64, err error)
 }
 
+// Signer is implemented by backends that can prove control of the node's
+// identity key. It is used by lnproxy to attest that a nostr advertisement
+// belongs to a particular lightning node. It is kept separate from LN so that
+// backends without message-signing support can still implement LN.
+type Signer interface {
+	// IdentityPubkey returns the hex-encoded compressed identity public key of
+	// the node.
+	IdentityPubkey() (string, error)
+	// SignMessage signs msg with the node's identity key and returns a
+	// zbase32-encoded recoverable signature, as produced by LND's
+	// `lnrpc.Lightning/SignMessage` and `lncli signmessage`.
+	SignMessage(msg []byte) (string, error)
+}
+
 type DecodedInvoice struct {
 	PaymentHash     string `json:"payment_hash"`
 	Timestamp       uint64 `json:"timestamp,string"`
